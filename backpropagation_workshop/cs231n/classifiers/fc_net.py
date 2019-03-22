@@ -189,6 +189,10 @@ class FullyConnectedNet(object):
         for i, hidden_dim in enumerate(hidden_dims):
             self.params['W' + str(i)] = weight_scale * np.random.randn(input_dim, hidden_dim)
             self.params['b' + str(i)] = np.zeros(hidden_dim)
+            if (self.normalization == 'batchnorm') or (self.normalization == 'layernorm'):
+                self.params['gamma' + str(i)] = np.ones(hidden_dim)
+                self.params['beta' + str(i)] = np.zeros(hidden_dim)
+            
             input_dim = hidden_dim
         self.params['W' + str(self.num_layers - 1)] = weight_scale * np.random.randn(input_dim, num_classes)
         self.params['b' + str(self.num_layers - 1)] = np.zeros(num_classes)
@@ -259,6 +263,18 @@ class FullyConnectedNet(object):
 #             outs.append(out)
             caches.append(cache)
             if i != self.num_layers - 1:
+                if self.normalization == 'batchnorm':
+                    out, cache = batchnorm_forward(out, 
+                                                   self.params['gamma' + str(i)],
+                                                   self.params['beta' + str(i)], 
+                                                   self.bn_params[i])
+                    caches.append(cache)
+                elif self.normalization == 'layernorm':
+                    out, cache = layernorm_forward(out, 
+                                                   self.params['gamma' + str(i)],
+                                                   self.params['beta' + str(i)], 
+                                                   self.bn_params[i])
+                    caches.append(cache)    
                 out, cache = relu_forward(out)
 #                 outs.append(out)
                 caches.append(cache)
@@ -300,6 +316,12 @@ class FullyConnectedNet(object):
                     dl_dout = dropout_backward(dl_dout, cache)
                 cache = caches.pop(-1)
                 dl_dout = relu_backward(dl_dout, cache)
+                if self.normalization == 'batchnorm':
+                    cache = caches.pop(-1)
+                    dl_dout, grads['gamma' + str(i)], grads['beta' + str(i)] = batchnorm_backward(dl_dout, cache)
+                elif self.normalization == 'layernorm':
+                    cache = caches.pop(-1)
+                    dl_dout, grads['gamma' + str(i)], grads['beta' + str(i)] = layernorm_backward(dl_dout, cache)
             cache = caches.pop(-1)
             dl_dout, dl_dW, grads['b' + str(i)] = affine_backward(dl_dout, cache)
             grads['W' + str(i)] = dl_dW + self.reg * self.params['W' + str(i)]
